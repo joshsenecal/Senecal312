@@ -25,14 +25,26 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
-	UPROPERTY(EditAnywhere)
+	UFUNCTION(BlueprintCallable, Category = "Resource")
+		int Gather();
+
+	UFUNCTION(BlueprintCallable, Category = "Resource")
+	bool IsDepleted() const { return bIsDepleted; }
+
+	UPROPERTY(EditAnywhere, Category = "Resource")
 		FString resourceName = "Wood";
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "Resource")
 		int resourceAmount = 5;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "Resource")
 		int totalResource = 100;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resource")
+		int currentResource = 0;
+
+	UPROPERTY(EditAnywhere, Category = "Resource", meta = (ClampMin = "0.1"))
+		float respawnTime = 30.0f;
 
 	UPROPERTY()
 		FText tempText;
@@ -42,5 +54,14 @@ public:
 
 	UPROPERTY(EditAnywhere)
 		UStaticMeshComponent* Mesh;
+
+private:
+	void Deplete();
+	void Respawn();
+
+	UPROPERTY(VisibleAnywhere, Category = "Resource")
+		bool bIsDepleted = false;
+
+	FTimerHandle RespawnTimerHandle;
 
 };
