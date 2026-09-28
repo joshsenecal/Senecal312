@@ -113,39 +113,36 @@ void APlayerChar::FindObject()
 	QueryParams.bReturnFaceIndex = true;
 
 	if (!isBuilding) {
+
 		if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Visibility, QueryParams)) {
 
 			AResource_M* HitResource = Cast<AResource_M>(HitResult.GetActor());
 
-			if (Stamina > 5.0f) {
+			if (HitResource && Stamina > 5.0f) {
 
-				if (HitResource) {
+				int gathered = HitResource->Gather();
 
-					FString hitName = HitResource->resourceName;
-					int resourceValue = HitResource->resourceAmount;
+				if (gathered > 0) {
 
-					HitResource->totalResource = HitResource->totalResource - resourceValue;
+					GiveResource(gathered, HitResource->resourceName);
 
-					if (HitResource->totalResource > resourceValue) {
+					matsCollected = matsCollected + gathered;
 
-						GiveResource(resourceValue, hitName);
-
-						matsCollected = matsCollected + resourceValue;
-
+					if (objWidget) {
 						objWidget->UpdatematOBJ(matsCollected);
-
-						check(GEngine != nullptr);
-						GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Resource Collected"));
-
-						UGameplayStatics::SpawnDecalAtLocation(GetWorld(), hitDecal, FVector(10.0f, 10.0f, 10.0f), HitResult.Location, FRotator(-90, 0, 0), 2.0f);
-
-						SetStamina(-5.0f);
 					}
-					else {
-						HitResource->Destroy();
-						check(GEngine != nullptr);
-						GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Resource Depleted"));
-					}
+
+					check(GEngine != nullptr);
+					GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Resource collected"));
+
+					UGameplayStatics::SpawnDecalAtLocation(GetWorld(), hitDecal, FVector(10.0f, 10.0f, 10.0f), HitResult.Location, FRotator(-90, 0, 0), 2.0f);
+
+					SetStamina(-5.0f);
+				}
+
+				if (HitResource->IsDepleted()) {
+					check(GEngine != nullptr);
+					GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Resource depleted"));
 				}
 			}
 		}
@@ -154,7 +151,9 @@ void APlayerChar::FindObject()
 		isBuilding = false;
 		objectsBuilt = objectsBuilt + 1.0f;
 
-		objWidget->UpdatebuildOBJ(objectsBuilt);
+		if (objWidget) {
+			objWidget->UpdatebuildOBJ(objectsBuilt);
+		}
 	}
 }
 
