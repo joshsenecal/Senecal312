@@ -2,6 +2,7 @@
 
 
 #include "PlayerChar.h"
+#include "Engine/DamageEvents.h"
 
 // Sets default values
 APlayerChar::APlayerChar()
@@ -24,6 +25,16 @@ APlayerChar::APlayerChar()
 	ResourcesNameArray.Add(TEXT("Stone"));
 	ResourcesNameArray.Add(TEXT("Berry"));
 
+}
+
+float APlayerChar::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	const float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+
+	if (ActualDamage > 0.0f) {
+		SetHealth(-ActualDamage);
+	}
+	return ActualDamage;
 }
 
 // Called when the game starts or when spawned
