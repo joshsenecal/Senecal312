@@ -2,6 +2,7 @@
 
 
 #include "PlayerChar.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/DamageEvents.h"
 
 // Sets default values
@@ -27,23 +28,10 @@ APlayerChar::APlayerChar()
 
 }
 
-float APlayerChar::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
-{
-	const float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
-
-	if (ActualDamage > 0.0f) {
-		SetHealth(-ActualDamage);
-	}
-	return ActualDamage;
-}
-
 // Called when the game starts or when spawned
 void APlayerChar::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	FTimerHandle StatsTimerHandle;
-	GetWorld()->GetTimerManager().SetTimer(StatsTimerHandle, this, &APlayerChar::DecreaseStats, 2.0f, true);
 
 	if (objWidget) {
 
@@ -58,7 +46,12 @@ void APlayerChar::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	playerUI->UpdateBars(Health, Hunger, Stamina);
+	UpdateStats(DeltaTime);
+
+	if (playerUI) {
+		playerUI->UpdateBars(Health, Hunger, Stamina);
+	}
+	
 
 	if (isBuilding) {
 		if (spawnedPart) {
@@ -83,9 +76,25 @@ void APlayerChar::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 	// Setup player actions
 	PlayerInputComponent->BindAction("JumpEvent", IE_Pressed, this, &APlayerChar::StartJump);
 	PlayerInputComponent->BindAction("JumpEvent", IE_Released, this, &APlayerChar::StopJump);
+	PlayerInputComponent->BindAction("SprintEvent", IE_Pressed, this, &APlayerChar::StartSprint);
+	PlayerInputComponent->BindAction("SprintEvent", IE_Released, this, &APlayerChar::StopSprint);
 	PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &APlayerChar::FindObject);
 	PlayerInputComponent->BindAction("RotPart", IE_Pressed, this, &APlayerChar::RotateBuilding);
 
+}
+
+float APlayerChar::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	const float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+
+	if (ActualDamage > 0.0f) {
+		SetHealth(-ActualDamage);
+
+		// Pauses health + stam regen for a moment
+		LastDamageTime = GetWorld()->GetTimeSeconds();
+	}
+
+	return ActualDamage;
 }
 
 void APlayerChar::MoveForward(float axisValue)
@@ -108,6 +117,16 @@ void APlayerChar::StartJump()
 void APlayerChar::StopJump()
 {
 	bPressedJump = false;
+}
+
+void APlayerChar::StartSprint()
+{
+	bWantsToSprint = true;
+}
+
+void APlayerChar::StopSprint()
+{
+	bWantsToSprint = false;
 }
 
 void APlayerChar::FindObject()
@@ -170,46 +189,87 @@ void APlayerChar::FindObject()
 
 void APlayerChar::SetHealth(float amount)
 {
-	if (Health + amount < 100) {
-
-		Health = Health + amount;
-
-	}
+	Health = FMath::Clamp(Health + amount, 0.0f, MaxHealth);
 }
 
 void APlayerChar::SetHunger(float amount)
 {
-	if (Hunger + amount < 100) {
-
-		Hunger = Hunger + amount;
-
-	}
+	Hunger = FMath::Clamp(Hunger + amount, 0.0f, MaxHunger);
 }
 
 void APlayerChar::SetStamina(float amount)
 {
-	if (Stamina + amount < 100) {
-
-		Stamina = Stamina + amount;
-
-	}
+	Stamina = FMath::Clamp(Stamina + amount, 0.0f, GetMaxStaminaCap());
 }
 
-void APlayerChar::DecreaseStats()
+float APlayerChar::GetMaxStaminaCap() const
 {
-	if (Hunger > 0) {
-
-		SetHunger(-1.0f);
-
+	if (LowHungerThreshold <= 0.0f || Hunger >= LowHungerThreshold) {
+		return MaxStamina;
 	}
-	
-	SetStamina(10.0f);
 
-	if (Hunger <= 0) {
+	const float Alpha = FMath::Clamp(Hunger / LowHungerThreshold, 0.0f, 1.0f);
+	return FMath::Lerp(MaxStamina * LowHungerMinStaminaFraction, MaxStamina, Alpha);
+}
 
-		SetHealth(-3.0f);
+void APlayerChar::UpdateStats(float DeltaTime)
+{
 
+	const float TimeSinceDamage = GetWorld()->GetTimeSeconds() - LastDamageTime;
+
+	// Hunger drain
+	SetHunger(-HungerDrainPerSecond * DeltaTime);
+
+	// Health drain due to starvation, regen when well fed
+	if (Hunger <= 0.0f) {
+		SetHealth(-StarvationDamagePerSecond * DeltaTime);
 	}
+	else if (Hunger >= HealthRegenHungerThreshold && Health > 0.0f && Health < MaxHealth && TimeSinceDamage >= HealthRegenDelayAfterDamage) {
+		SetHealth(HealthRegenPerSecond * DeltaTime);
+	}
+
+	// Sprinting
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	const bool bMoving = GetVelocity().SizeSquared2D() > 1.0f;
+	const bool bOnGround = !MoveComp->IsFalling();
+
+	// Running out of stamina locks sprinting
+	if (Stamina <= 0.0f) {
+		bIsExhausted = true;
+	}
+	else if (bIsExhausted && Stamina >= SprintRecoverThreshold) {
+		bIsExhausted = false;
+	}
+
+	const bool bShouldSprint = bWantsToSprint && !bIsExhausted && bMoving;
+
+	if (bShouldSprint != bIsSprinting) {
+		if (bShouldSprint) {
+			WalkSpeed = MoveComp->MaxWalkSpeed;
+		}
+
+		bIsSprinting = bShouldSprint;
+		MoveComp->MaxWalkSpeed = bIsSprinting ? WalkSpeed * SprintSpeedMultiplier : WalkSpeed;
+	}
+
+	// Stamina drains while sprinting, and regenerates when not sprinting (paused after damage)
+	if (bIsSprinting) {
+		if (bOnGround) {
+			SetStamina(-SprintStaminaPerSecond * DeltaTime);
+		}
+	}
+	else if (TimeSinceDamage >= StaminaRegenDelayAfterDamage) {
+		float Regen = StaminaRegenPerSecond;
+
+		if (Hunger < LowHungerThreshold) {
+			Regen *= LowHungerMinStaminaRegenMultiplier;
+		}
+
+		SetStamina(Regen * DeltaTime);
+	}
+
+	// If low hunger just lowered the cap, pull stamina down to it
+	Stamina = FMath::Min(Stamina, GetMaxStaminaCap());
 }
 
 void APlayerChar::GiveResource(float amount, FString resourceType)
