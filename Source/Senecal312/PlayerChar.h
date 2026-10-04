@@ -10,6 +10,7 @@
 #include "BuildingPart.h"
 #include "PlayerWidget.h"
 #include "ObjectiveWidget.h"
+#include "SurvivalSaveGame.h"
 #include "PlayerChar.generated.h"
 
 UCLASS()
@@ -25,7 +26,7 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
-public:	
+public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
@@ -35,172 +36,193 @@ public:
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 
 	UFUNCTION()
-		void MoveForward(float axisValue);
+	void MoveForward(float axisValue);
 
 	UFUNCTION()
-		void MoveRight(float axisValue);
+	void MoveRight(float axisValue);
 
 	UFUNCTION()
-		void StartJump();
+	void StartJump();
 
 	UFUNCTION()
-		void StopJump();
+	void StopJump();
 
 	UFUNCTION()
-		void StartSprint();
+	void StartSprint();
 
 	UFUNCTION()
-		void StopSprint();
+	void StopSprint();
 
 	UFUNCTION()
-		void FindObject();
+	void FindObject();
 
-	// - - PLAYER STAT SETTERS - -
+	// F5 / F9
+	UFUNCTION()
+	void QuickSave();
+
+	UFUNCTION()
+	void QuickLoad();
+
+	// Used by the save system.
+	void WriteSaveData(FPlayerSaveData& OutData);
+	void ApplySaveData(const FPlayerSaveData& InData);
+
+	// Stat setters add 'amount' to the stat and clamp the result to its valid range.
+	UFUNCTION(BlueprintCallable)
+	void SetHealth(float amount);
 
 	UFUNCTION(BlueprintCallable)
-		void SetHealth(float amount);
+	void SetHunger(float amount);
 
 	UFUNCTION(BlueprintCallable)
-		void SetHunger(float amount);
+	void SetStamina(float amount);
 
-	UFUNCTION(BlueprintCallable)
-		void SetStamina(float amount);
+	// Current stamina ceiling. Drops below MaxStamina when hunger is low.
+	UFUNCTION(BlueprintPure, Category = "Player Stats")
+	float GetMaxStaminaCap() const;
 
 	UFUNCTION(BlueprintPure, Category = "Player Stats")
-		float GetMaxStaminaCap() const;
-
-	UFUNCTION(BlueprintPure, Category = "Player Stats")
-		bool IsSprinting() const { return bIsSprinting; }
+	bool IsSprinting() const { return bIsSprinting; }
 
 	UFUNCTION()
-		void GiveResource(float amount, FString resourceType);
+	void GiveResource(float amount, FString resourceType);
 
 	UFUNCTION(BlueprintCallable)
-		void UpdateResources(float woodAmount, float stoneAmount, FString buildingObject);
+	void UpdateResources(float woodAmount, float stoneAmount, FString buildingObject);
 
 	UFUNCTION(BlueprintCallable)
-		void SpawnBuilding(int buildingID, bool& isSuccess);
+	void SpawnBuilding(int buildingID, bool& isSuccess);
 
 	UFUNCTION()
-		void RotateBuilding();
+	void RotateBuilding();
 
 	UPROPERTY(VisibleAnywhere)
-		UCameraComponent* PlayerCamComp;
+	UCameraComponent* PlayerCamComp;
 
-	// - - CURRENT PLAYER STATS - -
+	// - - CURRENT STATS - -
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats")
-		float Health = 100.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Player Stats")
+	float Health = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats")
-		float Hunger = 100.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Player Stats")
+	float Hunger = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats")
-		float Stamina = 100.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Player Stats")
+	float Stamina = 100.0f;
 
-	// - - MAX PLAYER STATS - -
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Max")
-		float MaxHealth = 100.0f;
+	// - - MAXIMUMS - -
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Max")
-		float MaxHunger = 100.0f;
+	float MaxHealth = 100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Max")
-		float MaxStamina = 100.0f;
+	float MaxHunger = 100.0f;
 
-	// - - RATES PER SECOND - -
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Max")
+	float MaxStamina = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Rates")
-		float HungerDrainPerSecond = 0.5f;
+	// - - RATES (PER SECOND) - -
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Rates")
-		float StarvationDamagePerSecond = 1.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Rates")
+	float HungerDrainPerSecond = 0.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Rates")
-		float StaminaRegenPerSecond = 5.0f;
+	// Health lost per second while hunger is at 0.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Rates")
+	float StarvationDamagePerSecond = 1.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Rates")
-		float HealthRegenPerSecond = 1.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Rates")
+	float StaminaRegenPerSecond = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Rates")
+	float HealthRegenPerSecond = 1.0f;
 
 	// - - HUNGER EFFECTS - -
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Hunger Effects")
-		float LowHungerThreshold = 30.0f;
+	// Below this hunger, max stamina shrinks and stamina regen slows.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Hunger Effects")
+	float LowHungerThreshold = 30.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Hunger Effects", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-		float LowHungerMinStaminaFraction = 0.5f;
+	// Fraction of MaxStamina left when hunger reaches 0 (scales linearly from LowHungerThreshold).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Hunger Effects", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float LowHungerMinStaminaFraction = 0.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Hunger Effects", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-		float LowHungerMinStaminaRegenMultiplier = 0.5f;
+	// Stamina regen is multiplied by this while hunger is below LowHungerThreshold.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Hunger Effects", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float LowHungerStaminaRegenMultiplier = 0.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Hunger Effects")
-		float HealthRegenHungerThreshold = 60.0f;
+	// Health only regenerates while hunger is at or above this.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Hunger Effects")
+	float HealthRegenHungerThreshold = 60.0f;
 
 	// - - DAMAGE EFFECTS - -
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Damage Effects")
-		float HealthRegenDelayAfterDamage = 5.0f;
+	// Seconds after taking damage before stamina starts regenerating again.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Damage Effects")
+	float StaminaRegenDelayAfterDamage = 2.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Damage Effects")
-		float StaminaRegenDelayAfterDamage = 2.0f;
+	// Seconds after taking damage before health starts regenerating again.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Damage Effects")
+	float HealthRegenDelayAfterDamage = 5.0f;
 
 	// - - ACTION COSTS - -
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Actions")
-		float GatherStaminaCost = 5.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Actions")
+	float GatherStaminaCost = 5.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Actions")
-		float SprintStaminaPerSecond = 15.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Actions")
+	float SprintStaminaPerSecond = 15.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Actions")
-		float SprintSpeedMultiplier = 1.5f;
+	// Sprint speed = normal walk speed * this.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Actions")
+	float SprintSpeedMultiplier = 1.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PlayerStats|Actions")
-		float SprintRecoverThreshold = 20.0f;
+	// After running out of stamina, sprinting stays locked until stamina recovers to this.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats|Actions")
+	float SprintRecoverThreshold = 20.0f;
 
-	// - - RESOURCES + BUILDING - -
-	UPROPERTY(EditAnywhere, Category = "Resources")
-		int Wood;
-
-	UPROPERTY(EditAnywhere, Category = "Resources")
-		int Stone;
+	// - - RESOURCES / BUILDING - -
 
 	UPROPERTY(EditAnywhere, Category = "Resources")
-		int Berry;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resources")
-		TArray<int> ResourcesArray;
+	int Wood;
 
 	UPROPERTY(EditAnywhere, Category = "Resources")
-		TArray<FString> ResourcesNameArray;
+	int Stone;
+
+	UPROPERTY(EditAnywhere, Category = "Resources")
+	int Berry;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Resources")
+	TArray<int> ResourcesArray;
+
+	UPROPERTY(EditAnywhere, Category = "Resources")
+	TArray<FString> ResourcesNameArray;
 
 	UPROPERTY(EditAnywhere, Category = "HitMarker")
-		UMaterialInterface* hitDecal;
+	UMaterialInterface* hitDecal;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Building Supplies")
-		TArray<int> BuildingArray;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Building Supplies")
+	TArray<int> BuildingArray;
 
 	UPROPERTY()
-		bool isBuilding;
+	bool isBuilding;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
-		TSubclassOf<ABuildingPart> BuildPartClass;
+	TSubclassOf<ABuildingPart> BuildPartClass;
 
 	UPROPERTY()
-		ABuildingPart* spawnedPart;
+	ABuildingPart* spawnedPart;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		UPlayerWidget* playerUI;
+	UPlayerWidget* playerUI;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		UObjectiveWidget* objWidget;
+	UObjectiveWidget* objWidget;
 
-	UPROPERTY()
-		float objectsBuilt;
+	UPROPERTY(SaveGame)
+	float objectsBuilt;
 
-	UPROPERTY()
-		float matsCollected;
+	UPROPERTY(SaveGame)
+	float matsCollected;
 
 private:
 	// Runs every frame: hunger drain, starvation, regen, sprint drain.
@@ -210,9 +232,13 @@ private:
 	bool bIsSprinting = false;
 	bool bIsExhausted = false;
 
-	// Normal walk speed, captured from CharacterMovementComponent at BeginPlay to allow for sprinting speed changes
+	// BuildingArray index of the part currently being placed (-1 if none).
+	// If you save mid-placement, that part is refunded in the save instead of being saved half-placed.
+	int32 CurrentBuildID = -1;
+
+	// Normal movement speed, captured from the movement component when sprinting starts.
 	float WalkSpeed = 600.0f;
 
-	// Time since last damage taken, starts far in the past so regen is not prevented at spawn
+	// World time of the last hit taken. Starts far in the past so regen isn't blocked at spawn.
 	float LastDamageTime = -1000.0f;
 };
