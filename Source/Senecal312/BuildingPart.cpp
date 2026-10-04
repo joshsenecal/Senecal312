@@ -2,11 +2,12 @@
 
 
 #include "BuildingPart.h"
+#include "Engine/StaticMesh.h"
 
 // Sets default values
 ABuildingPart::ABuildingPart()
 {
- 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
@@ -20,7 +21,7 @@ ABuildingPart::ABuildingPart()
 void ABuildingPart::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 }
 
 // Called every frame
@@ -30,3 +31,14 @@ void ABuildingPart::Tick(float DeltaTime)
 
 }
 
+void ABuildingPart::OnBeforeSave_Implementation()
+{
+	SavedMesh = Mesh ? Mesh->GetStaticMesh() : nullptr;
+}
+
+void ABuildingPart::OnAfterLoad_Implementation()
+{
+	if (Mesh && !SavedMesh.IsNull()) {
+		Mesh->SetStaticMesh(SavedMesh.LoadSynchronous());
+	}
+}
